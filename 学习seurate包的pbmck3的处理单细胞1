@@ -8,28 +8,33 @@ pbmc.data <- Read10X(data.dir = "./filtered_gene_bc_matrices/hg19")
 # Initialize the Seurat object with the raw (non-normalized data).
 pbmc <- CreateSeuratObject(counts = pbmc.data, project = "pbmc3k", min.cells = 3, min.features = 200)
 pbmc
+
+##筛选细胞和基因，要求细胞的基因不能太多或者太少，排除线粒体基因，因为考虑是死亡凋亡之类的
+##排除double 或者多包的细胞，基因太多；太少代表可能是空细胞？？
 # The [[ operator can add columns to object metadata. This is a great place to stash QC stats
 pbmc[["percent.mt"]] <- PercentageFeatureSet(pbmc, pattern = "^MT-")
 # Show QC metrics for the first 5 cells
-head(pbmc@meta.data, 5)
+#head(pbmc@meta.data, 5)
 # Visualize QC metrics as a violin plot
-VlnPlot(pbmc, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
-pbmc <- subset(pbmc, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5)
-pbmc <- NormalizeData(pbmc, normalization.method = "LogNormalize", scale.factor = 10000)
-pbmc <- FindVariableFeatures(pbmc, selection.method = "vst", nfeatures = 2000)
+#VlnPlot(pbmc, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+pbmc <- subset(pbmc, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5)#非常重要，需要筛选
+pbmc <- NormalizeData(pbmc, normalization.method = "LogNormalize", scale.factor = 10000)#归一化
+pbmc <- FindVariableFeatures(pbmc, selection.method = "vst", nfeatures = 2000)#找出高标基因，也就是我们分类的目的基因
 
-# Identify the 10 most highly variable genes
+# Identify the 10 most highly variable genes，#找出高标基因，也就是我们分类的目的基因
 top10 <- head(VariableFeatures(pbmc), 10)
 
-# plot variable features with and without labels
-plot1 <- VariableFeaturePlot(pbmc)
-plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
-plot1 + plot2
+# plot variable features with and without labels，高变基因的可视化
+#plot1 <- VariableFeaturePlot(pbmc)
+#plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+#plot1 + plot2
 
+#归一化，所有基因，数据大可能会比较慢
 all.genes <- rownames(pbmc)
 pbmc <- ScaleData(pbmc, features = all.genes)
-pbmc <- ScaleData(pbmc, vars.to.regress = "percent.mt")
+pbmc <- ScaleData(pbmc, vars.to.regress = "percent.mt")#好像也是筛选的一种，考虑了线粒体基因
 
+#PCA，按照pca的结果按照自己要求分几类？？？？可以通过可视化，拐点处进行选择，这里pca=10会比较合适。
 pbmc <- RunPCA(pbmc, features = VariableFeatures(object = pbmc))
 # Examine and visualize PCA results a few different ways
 print(pbmc[["pca"]], dims = 1:5, nfeatures = 5)
@@ -43,14 +48,14 @@ DimHeatmap(pbmc, dims = 1, cells = 500, balanced = TRUE)
 pbmc <- JackStraw(pbmc, num.replicate = 100)
 pbmc <- ScoreJackStraw(pbmc, dims = 1:20)
 JackStrawPlot(pbmc, dims = 1:15)
-ElbowPlot(pbmc)
+ElbowPlot(pbmc)#可以通过可视化，拐点处进行选择，这里pca=10会比较合适。
 
 pbmc <- FindNeighbors(pbmc, dims = 1:10)
 pbmc <- FindClusters(pbmc, resolution = 0.5)
 # Look at cluster IDs of the first 5 cells
 head(Idents(pbmc), 5)
 
-
+#非线性降维的方案，一般是UMAP或者TSNE
 # If you haven't installed UMAP, you can do so via reticulate::py_install(packages =
 # 'umap-learn')
 pbmc <- RunUMAP(pbmc, dims = 1:10)
@@ -60,7 +65,7 @@ pbmc <- RunTSNE(object = pbmc)
 DimPlot(pbmc, reduction = "umap")
 #saveRDS(pbmc, file = "./pbmc_tutorial.rds")
 
-
+###差异基因，这里不太了解？？？？
 # find all markers of cluster 2
 cluster2.markers <- FindMarkers(pbmc, ident.1 = 2, min.pct = 0.25)
 head(cluster2.markers, n = 5)
@@ -93,4 +98,4 @@ pbmc <- RenameIdents(pbmc, new.cluster.ids)
 DimPlot(pbmc, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
 saveRDS(pbmc, file = "./pbmc3k_final.rds")
 
-
+###如何自主注视细胞种类？
