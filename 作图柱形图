@@ -1,0 +1,44 @@
+rm(list = ls())
+setwd("D:/桌面/BEV预实验4")
+#install.packages("openxlsx")
+library(openxlsx)
+library(reshape2)
+library(ggplot2) #
+#wide to long data
+
+library(readxl)
+a=read_excel("荧光量化带编4-11 - 副本.xlsx")[,c(4,5,6,7,8,9)]
+ROI=a
+colnames(ROI)=c("NO","group","day5","day10","day14","day18")
+
+df=melt(ROI,id.vars = c("NO","group"))
+colnames(df)=c("NO", "group", "luc", "value")
+str(df)
+
+
+###if delete na
+df$group=as.factor(df$group)
+df$value=as.numeric(df$value)
+table(is.na(df$value))
+df=na.omit(df)
+colnames(df)
+####################
+table(df$group)
+df$group=factor(df$group,levels = c("NC","H","L","RT","H+RT","L+RT","PD-1","H+P","L+P"))
+
+
+library(RColorBrewer)
+ggplot(df,aes(group,value,fill=luc))+
+ scale_fill_manual(values = c("#d0d1e6","#bdbdbd","#636363","#252525"))+ 
+  geom_bar(stat="identity",position="dodge")+
+ # theme_wsj()+
+ # scale_fill_wsj("rgby", "")+
+  theme(axis.ticks.length=unit(0.5,'cm'))+
+ # guides(fill=guide_legend(title=NULL))+
+  ggtitle("The CT2Aluc tumor volume growth")+
+  theme(axis.title = element_blank())
+ 
+ 
+ dev.off()
+ 
+ 
