@@ -1,0 +1,39 @@
+
+getwd()
+rm(list = ls())
+setwd("D:/桌面/BEV预实验4")
+library(readxl)
+a=read_excel("OS.xlsx")
+b=a[,c(1,2,5,6)]
+str(b)
+colnames(b)=c("group" , "NO",  "event", "os" )
+table(b$group)
+#b1=b[b$group=="NC"|b$group=="H"|b$group=="L"|b$group=="RT"|b$group=="PD-1",]
+b1=b[b$group=="NC"|b$group=="L+RT"|b$group=="H+RT"|b$group=="RT",]
+#b1=b[b$group=="P"|b$group=="H"|b$group=="L"|b$group=="L+P"|b$group=="H+P",]
+
+
+###1
+library(survival)
+fit<-survfit(Surv(os,event)~group,data=b1)
+plot(fit)
+ggsurvplot(fit)
+
+
+###2
+library(ggplot2)
+library(survminer)
+p1<-ggsurvplot(fit,data = b1,
+               palette = 'lancet', #你可以试着用jcp
+               linetype = 1, #曲线类型，默认为1即可
+               conf.int = T,conf.int.style='step', #置信区间，按虚线分布
+               pval = T,pval.method = T,#显示P值和方法
+               surv.median.line = 'hv',#显示中位生存时间
+               risk.table = T,risk.table.pos='in',#显示危险表，并置入图内
+               legend=c(0.2,0.5),#标签位置
+               legend.title="group",#更改分组名
+             #  legend.labs=c("Female","Male"),#更改组内数据名，记得不要搞错，最好先看一下
+               title="Survival curve", #以前是main=，现在改成了title=
+               ggtheme = theme_bw(base_size = 9) #改一下主题，改一下字体大小
+)
+p1
