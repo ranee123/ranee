@@ -1,0 +1,63 @@
+getwd()
+setwd("D:/桌面/GEO")
+library(GEOquery)
+library(Biobase)
+library(limma)        #主要用这个包分析
+library(plyr)
+library(dplyr)
+
+rm(list = ls())
+#	log2 signal
+m <- getGEO('GSE45404', GSEMatrix=T, destdir=getwd())  #如此获得是Matrix类的表达数据，默认GSEMatrix=TRUE 
+ges1=m[[1]]
+##log2 signal
+assayData <- ges1@assayData
+exp1 <- assayData$exprs %>%as.data.frame()
+boxplot(exp1)###
+dev.off()
+
+##
+phenoData <- ges1@phenoData
+pphenoData <-phenoData@data %>% select("geo_accession"  ,"class:ch1"  )
+
+#probe + gene
+featureData <- ges1@featureData
+fd2=featureData@data %>% select("ID","GENE_SYMBOL")
+probeAno=fd2
+index <-grep("1",unlist(lapply(strsplit(probeAno$GENE_SYMBOL,"///"),length)))
+proAno <- probeAno[index,]
+proAno <- na.omit(proAno)
+
+##probe2symbol
+exp2 <- data.frame(ID =rownames(exp1),exp1)
+eset <- merge(proAno,exp2,by = "ID")
+eset <- eset %>% as.matrix()
+rownames(eset) <- eset[,"GENE_SYMBOL"]
+
+##助limma包的avereps函数去重，并取均值。
+library(limma)
+eset <- eset[,-c(1:2)] 
+eset <- avereps(eset)
+eset <- as.data.frame(eset) %>% data.matrix() %>% as.data.frame()
+
+###
+library(limma)
+library(dplyr)
+
+##group,构建design 样本分组矩阵
+group=pphenoData$`class:ch1`
+design <- model.matrix(~0+group)
+rownames(design) = colnames(exp1)
+colnames(design)=c("Nonresponder","Responder")
+## 拟合模型
+fit <- lmFit(eset,design)
+contrast.matrix=makeContrasts(contrasts = c('Nonresponder-Responder'), levels = design)
+fit2 <- contrasts.fit(fit, contrast.matrix) 
+fit2 <- eBayes(fit2) 
+DiffEG<-topTable(fit2, coef=1, n=Inf) %>% na.omit()
+
+library(dplyr)
+res<-DiffEG
+res$gene=rownames(res)
+str(res)
+res_1<-res %>% dplyr::filter((logFC>100 | logFC < (-100)) & P.Value < 0.001)
