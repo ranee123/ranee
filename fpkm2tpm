@@ -1,0 +1,27 @@
+####读入基因表达matrix
+counts=read.delim("./TCGA-GBM.htseq_counts.tsv.gz")
+fpkm=read.delim("./TCGA-GBM.htseq_fpkm.tsv.gz")
+fpkmuq=read.delim("./TCGA-GBM.htseq_fpkm-uq.tsv.gz")
+
+#转换公式
+fpkmToTpm <- function(fpkm)
+{
+  exp(log(fpkm) - log(sum(fpkm)) + log(1e6))
+}
+
+countToEffCounts <- function(counts, len, effLen)
+{
+  counts * (len / effLen)
+}
+
+#变成行是基因名，column是样本的
+library(dplyr)
+expr_df=fpkm
+expr_df_nopoint <- expr_df %>% 
+  tidyr::separate(Ensembl_ID,into = c("Ensembl_ID","drop"),sep="\\.") %>% 
+  dplyr::select(-drop)
+rownames(expr_df_nopoint)=expr_df_nopoint$Ensembl_ID
+
+expMatrix=expr_df_nopoint[,-1]
+tpms <- apply(expMatrix,2,fpkmToTpm)
+tpms=as.data.frame(tpms)
