@@ -1,0 +1,94 @@
+getwd()
+setwd("/Volumes/Ranee/HL")
+library(readxl)
+library(dplyr)
+# ???յ?ǰ????
+rm(list = ls())
+# GSE207002
+#BiocManager::install("GEOquery")
+library(GEOquery)
+#eset=getGEO("GSE207002",destdir = ".",getGPL = F)
+#eset=getGEO(filename = "GSE207002_series_matrix.txt.gz",#destdir = ".",
+#           getGPL = F)
+
+#pd_GSE207002=pData(eset)
+
+##
+rm(list = ls())  
+options(stringsAsFactors = F)
+# ????GSE207002_RAW.tar
+# ??��??ȡ?ļ?????Ϊ????????
+dir <- "/Volumes/Ranee/HL/GSE207002_RAW/"#上一步下载的文件路径
+
+files <- list.files(path = dir, pattern = "*.txt.gz", recursive = T) #找到wwp1的WT和敲除样本,也就是文件名,用的list.files函数仅仅是文件的名字,并不包括里面的数据
+expr <- lapply(files,
+               function(x){
+                 # 只读取基因名和count
+                 expr <- read.table(file = file.path(dir,x), sep = "\t", header = T, stringsAsFactors = F)[,c(1,2)]#取出来第一列和第七列,即基因名和count计数,矩阵中取不相邻的两列就可以[,c(1,7)]这么取,也可以cbind(b$Geneid,b$Count)取,但啰嗦
+                 return(expr)#注意此时的files仅仅是文件名字,并不是解压后文件含有的矩阵信息,而这时的files是character,是字符型,要清楚的是,lapply不仅可以作用于列表list,同样可以应用在向量上.向量包括数值、字符、逻辑型向量
+               }) #这个循环非常棒,要理解function(x)这个里面的x是什么.files是什么,x就是什么,files是文件名,那么x也是文件名,所以才有file = file.path(dir,x),这个file.path(dir,x)就相当于read.table后面括号中的文件名
+df <- do.call(cbind, expr)#得到的每一个矩阵横向叠加(cbind就是列相加)
+rownames(df) <- df[,1]
+
+df <- df[,seq(2,ncol(df),by=2)] #ȥ???ظ???ȡ?Ļ?????#seq????:?ӵڶ??п?ʼ,ֱ??????һ??,by????Ϊ2��ȡ
+colnames(df) <- substr(files,1,10) #????Ϊ??????,??substr??ȡ?ַ???,????????????????GSM3613325
+df <- df[apply(df, 1, sum)!=0,] #ȥ??????????????count??Ϊ0?Ļ???,ȡ??��??????0?ľ???
+grouplist <- c(rep("control",9),rep("radioresistantT",9)) 
+
+#save(df,grouplist,file = "./expr_groupfpkm_GSE207002.Rdata")
+
+
+##
+rm(list = ls())  
+options(stringsAsFactors = F)
+load("/Volumes/Ranee/HL/expr_groupfpkm_GSE207002.Rdata")
+
+#转换公式
+fpkmToTpm <- function(fpkm)
+{
+  exp(log(fpkm) - log(sum(fpkm)) + log(1e6))
+}
+
+countToEffCounts <- function(counts, len, effLen)
+{
+  counts * (len / effLen)
+}
+
+#变成行是基因名，column是样本的
+library(dplyr)
+library(limma)
+library(edgeR)
+fpkm=df
+tpms <- apply(fpkm,2,fpkmToTpm)
+tpms=as.data.frame(tpms)
+
+conditions=grouplist %>%as.data.frame()
+rownames(conditions)=colnames(fpkm)
+colnames(conditions)="conditions"
+count_norm=tpms
+# Run the Wilcoxon rank-sum test for each gene
+
+pvalues <- sapply(1:nrow(count_norm),function(i){
+  data<-cbind.data.frame(gene=as.numeric(t(count_norm[i,])),conditions)
+  p=wilcox.test(gene~conditions, data)$p.value
+  return(p)
+})
+fdr=p.adjust(pvalues,method = "fdr")
+
+# Calculate fold-change for each gene
+
+conditionsLevel<-levels(factor(conditions$conditions))
+dataCon1=count_norm[,c(which(conditions==conditionsLevel[1]))]#"control"
+dataCon2=count_norm[,c(which(conditions==conditionsLevel[2]))]# "radioresistantT"  
+#foldChanges=log2(rowMeans(dataCon2)/rowMeans(dataCon1))
+foldChanges=log2(rowMeans(dataCon2)/rowMeans(dataCon1))
+# Output results based on FDR threshold
+outRst<-data.frame(log2foldChange=foldChanges, pValues=pvalues, FDR=fdr)
+rownames(outRst)=rownames(count_norm)
+outRst=na.omit(outRst)
+#fdrThres=0.05
+DiffEG_GSE207002WilcoxonTest=outRst
+DiffEG_GSE207002WilcoxonTest$gene=rownames(DiffEG_GSE207002WilcoxonTest)
+#write.table(outRst[outRst$FDR<fdrThres,], file="./examples.WilcoxonTest.rst.tsv",sep="\t", quote=F,row.names = T,col.names = T)
+#save(DiffEG_GSE207002WilcoxonTest,file ="DiffEG_WilcoxonTestGSE207002.Rdata" )
+#write.table(DiffEG_GSE207002WilcoxonTest,"DiffEG_GSE207002WilcoxonTest.xls",row.names = F,sep="\t",quote = F)
