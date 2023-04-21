@@ -1,0 +1,60 @@
+setwd("/Volumes/Ranee")
+
+library(dplyr)
+###基因相关分析，需要输入列名都是基因，row=patients，col=gene name的 matrix
+#CGGAcohort301
+load("/Volumes/Ranee/CGGAsort/CGGAcohort301.Rdata")
+PN=c("DLL3", "OLIG2", "ASCL1", "NCAM1", "SOX2")
+MES=c("CD44", "FN1", "LYN", "CHI3L1", "SERPINE1")
+g=c("PDZK1IP1",MES,PN)
+d=gene301[gene301$Gene_Name %in% g,]
+rownames(d)=d$Gene_Name
+d=d[,-1] %>% t()
+##########看一下gene A 和gene B之间的相关性如何####
+cor2 <- cor(d)
+library(corrplot)
+cor2=cor2[g,g]
+#直接画
+#pdf("COR_CGGAcohort301_PDZK1IP1_MES_PN.pdf",width = 5,height = 5)
+corrplot(cor2)
+dev.off()
+##
+rm(list = ls())
+
+
+
+##CGGA325_
+load("/Volumes/Ranee/CGGAsort/CGGA325_tpm.Rdata")
+PN=c("DLL3", "OLIG2", "ASCL1", "NCAM1", "SOX2")
+MES=c("CD44", "FN1", "LYN", "CHI3L1", "SERPINE1")
+g=c("PDZK1IP1",MES,PN)
+d=CGGA325_tpm_325[g,]
+d=d %>% t()
+##########看一下gene A 和gene B之间的相关性如何####
+cor2 <- cor(d)
+library(corrplot)
+cor2=cor2[g,g]
+#直接画
+#pdf("COR_CGGAcohort325_PDZK1IP1_MES_PN.pdf",width = 5,height = 5)
+corrplot(cor2)
+dev.off()
+##
+rm(list = ls())
+
+##CGGA693
+load("/Volumes/Ranee/CGGAsort/CGGA693_tpm.Rdata")
+PN=c("DLL3", "OLIG2", "ASCL1", "NCAM1", "SOX2")
+MES=c("CD44", "FN1", "LYN", "CHI3L1", "SERPINE1")
+g=c("PDZK1IP1",MES,PN)
+d=CGGA693_tpm_693[g,]
+d=d %>% t()
+##########看一下gene A 和gene B之间的相关性如何####
+cor2 <- cor(d)
+library(corrplot)
+cor2=cor2[g,g]
+#直接画
+#pdf("COR_CGGAcohort693_PDZK1IP1_MES_PN.pdf",width = 5,height = 5)
+corrplot(cor2)
+dev.off()
+##
+rm(list = ls())
