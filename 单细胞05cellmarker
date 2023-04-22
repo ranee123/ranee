@@ -1,0 +1,92 @@
+getwd()
+setwd("/Volumes/Ranee/SCRNA")
+rm(list = ls())
+load("/Volumes/Ranee/SCRNA/Seurat_Day0_fit_norm_pca_c.Rdata")
+###################
+library(Seurat)
+library(tidyverse)
+library(data.table)
+
+scedata=Seurat_Day0_fit_norm_pca_c
+
+head(Idents(scedata), 5)#查看前5个细胞的聚类ID
+table(scedata$seurat_clusters) #计算每个聚类包含的细胞数
+table(Idents(scedata)) #计算每个聚类包含的细胞数
+
+#单细胞亚群注释,FindMarkers查找亚群的标记基因
+#FindMarkers查找亚群的标记基因
+# 发现聚类1的所有biomarkers
+#cluster1.markers <- FindMarkers(scedata, ident.1 = 1, min.pct = 0.25)
+#head(cluster1.markers, n = 5)
+
+# 查找将聚类1与聚类2和3区分的所有标记基因
+#cluster5.markers <- FindMarkers(scedata, ident.1 = 5, ident.2 = c(2, 3), min.pct = 0.25)
+#head(cluster5.markers, n = 5)
+#cluster1.markers <- FindMarkers(scedata, ident.1 = 0, logfc.threshold = 0.25, test.use = "roc", only.pos = TRUE)
+
+# 与所有其他亚群相比，找到每个亚群的标记，仅报告阳性细胞
+scedata.markers <- FindAllMarkers(scedata, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+
+top10markers<- scedata.markers %>% group_by(cluster) %>% top_n(n = 2, wt = avg_log2FC)
+
+
+DoHeatmap(scedata , features = top10markers$gene, size = 3)
+
+
+#新id与之前id(0-8)一一对应
+new.cluster.ids <- c("0"="Fibroblast", 
+                     "1"="Endothelial", 
+                     "2"="Endothelial", 
+                     "3"="Endothelial", 
+                     "4"="Immune", 
+                     "5"="Immune", 
+                     "6"="Endothelial", 
+                     "7"="Fibroblast", 
+                     "8"="Other", 
+                     "9"="Immune", 
+                     "10"="Epithelial", 
+                     "11"="Endothelial", 
+                     "12"="Fibroblast", 
+                     "13"="Immune", 
+                     "14"="Other", 
+                     "15"="Immune", 
+                     "16"="Fibroblast", 
+                     "17"="Endothelial", 
+                     "18"="Fibroblast", 
+                     "19"="Epithelial", 
+                     "20"="Endothelial",  "21"="Endothelial2", 
+                     "22"="Immune",
+                     "23"="Immune")
+
+names(new.cluster.ids) <- levels(scedata)
+#更改seuratd对象中的Idents
+scedata <- RenameIdents(scedata, new.cluster.ids)
+
+#scedata=RunUMAP(scedata, dims = 1:25)
+DimPlot(scedata, reduction = 'umap', 
+        label = TRUE, pt.size = 0.5) + NoLegend()
+
+
+
+#####visuliaztion genes in cluster cell 
+PN=c("DLL3", "OLIG2", "ASCL1", "NCAM1", "SOX2")
+MES=c("CD44", "FN1", "LYN", "CHI3L1", "SERPINE1")
+markers <- c(PN,MES)
+DotPlot(scedata,features = markers)+coord_flip()
+FeaturePlot(scedata,features = "ARPC1B")
+
+scedata$celltype <- scedata@active.ident
+scedata$seurat_annotations <- scedata@active.ident
+scedata$seurat_clusters <- scedata@active.ident
+
+
+DimPlot(scedata, group.by = "celltype",label = T)
+DimPlot(scedata, group.by = "seurat_annotations",label = T)
+DimPlot(scedata, group.by = "seurat_clusters",label = T)
+DimPlot(scedata,label = T,split.by = "orig.ident",ncol = 3)#orig.ident=sample
+
+
+#save(scedata, file = "scedata.RData")
+
+
+
