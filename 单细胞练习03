@@ -1,0 +1,67 @@
+rm(list = ls())
+setwd("/Volumes/Ranee/SCRNA")
+library(Seurat)
+library(tidyverse)
+library(data.table)
+
+##
+load("/Volumes/Ranee/SCRNA/GSE138794pdata.Rdata")
+scRNA=GSE138794pdata[grep("scRNA",GSE138794pdata$title),]
+sample=scRNA$geo_accession
+rm(scRNA,GSE138794pdata)
+
+
+
+##
+if(!file.exists("GSE138794/data")) dir.create("GSE138794/data", recursive = T)
+data_path="GSE138794/data/"
+
+files = list.files('./GSE138794_RAW/',pattern = '^GSM')
+#GSE <- substr(files ,1,10)
+GSE <- sample
+###GSE名称-22
+for (i in GSE) {
+  dir.create(paste0(data_path,i))
+}
+
+###
+for (i in 1:length(GSE)) {
+  print(1)
+  myfile <- paste0(getwd(),"/GSE138794_RAW/",files[str_detect(files,GSE[[i]])])
+  file.copy(myfile,paste0(data_path,GSE[[i]]))
+  old_names <- list.files(paste0(data_path,GSE[[i]]),full.names = T)
+  new_names <- unique(str_split(old_names,"_",simplify = T))[,3]
+  new_names <- c("barcodes.tsv" ,"genes.tsv", "matrix.mtx" ) 
+  new_names2 <-paste0(paste0(data_path,GSE[[i]]),"/",gsub(".gz","",new_names))
+  file.rename(old_names,new_names2)
+}
+
+data_path1="GSE138794/data"
+GSE_files=list.files(data_path1,full.names = T)
+
+system.time({
+  sceList = lapply(GSE_files,function(patient){ 
+    # patient=files[[1]] 
+    print(patient)
+    ct <- Read10X(patient,gene.column=1)
+    sce=CreateSeuratObject(counts =  ct ,
+                           project =  str_split_fixed(patient,"/",n=3)[,3],###即样本的GSM编号
+                           min.cells = 3, #Include features detected in at least this many cells.
+                           min.features = 200 #	Include cells where at least this many features are detected.
+    )
+    return(sce)
+  }) #返回一个List
+})#记录一下运行时间
+
+
+names(sceList)  
+GSE
+names(sceList) = GSE
+
+
+sce.all=merge(x=sceList[[1]],
+              y=sceList[ -1 ],add.cell.ids = GSE)
+
+table(sce.all@meta.data$orig.ident)
+
+#save(sce.all,file="GSE138794_scRNA_9.Rdata")
