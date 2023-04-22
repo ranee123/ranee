@@ -1,0 +1,73 @@
+getwd()
+setwd("/Volumes/Ranee/SCRNA")
+rm(list = ls())
+library(Seurat)
+library(tidyverse)
+library(data.table)
+###################
+load("/Volumes/Ranee/SCRNA/scedata.RData")
+library(Seurat)
+library(SeuratData)
+library(pbmc3k.SeuratData)##直接下载到本地再安装，网络太差了
+# devtools::install_github('satijalab/seurat-data')
+# view all available datasets
+View(AvailableData())
+# download 3k PBMCs from 10X Genomics
+#InstallData("pbmc3k")##直接下载到本地再安装，网络太差了
+# the details of pbmc3k.final
+?pbmc3k.final
+
+# loading dataset
+data("pbmc3k.final")
+pbmc3k.final=scedata
+#pbmc3k.final <- UpdateSeuratObject(pbmc3k.final)
+# plot
+DimPlot(pbmc3k.final, reduction = "umap",
+        group.by = "seurat_annotations",label = T) + NoLegend()
+# set cluster to idents
+Idents(pbmc3k.final) <- pbmc3k.final$seurat_annotations
+str(Idents(pbmc3k.final) )
+library(UCell)
+library(irGSEA)
+# custom geneset
+markers <- list()
+markers$Verhaak_GBM_MES <- c("CD44", "FN1", "LYN", "CHI3L1", "SERPINE1")
+markers$Verhaak_GBM_PN <- c("DLL3", "OLIG2", "ASCL1", "NCAM1", "SOX2")
+
+# calculate and integrate计算和整合
+pbmc3k.final <- irGSEA.score(object = pbmc3k.final, 
+                             geneset = markers,#geneset = NULL,
+                             assay = "RNA", 
+                             slot = "data", seeds = 123, ncores = 1,
+                             min.cells = 3, min.feature = 0,
+                             custom = T,  msigdb = T, 
+                             species = "Homo sapiens", category = "H",  
+                             subcategory = NULL, geneid = "symbol",
+                             method = c("AUCell", "UCell", "singscore", 
+                                        "ssgsea"),
+                             aucell.MaxRank = NULL, ucell.MaxRank = NULL, 
+                             kcdf = 'Gaussian')
+
+Seurat::Assays(pbmc3k.final)
+result.dge <- irGSEA.integrate(object = pbmc3k.final, 
+                               group.by = "seurat_annotations",
+                             #  metadata = NULL, col.name = NULL,
+                             method = c("AUCell", "UCell", "singscore", 
+                                        "ssgsea"))
+
+class(result.dge)
+#Visualization可视化
+
+irGSEA.heatmap.plot <- irGSEA.heatmap(object = result.dge, 
+                                      method = "RRA",
+                                      top = 50, 
+                                      show.geneset = NULL)
+irGSEA.heatmap.plot
+#"Verhaak-GBM-MES" "Verhaak-GBM-PN" 
+scatterplot <- irGSEA.density.scatterplot(object = pbmc3k.final,
+                                          method =  "UCell",
+                                          show.geneset ="Verhaak-GBM-MES",
+                                          reduction = "umap")
+scatterplot
+
+dev.off()
