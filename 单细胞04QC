@@ -1,0 +1,63 @@
+getwd()
+setwd("/Volumes/Ranee/SCRNA")
+rm(list = ls())
+library(Seurat)
+library(tidyverse)
+library(data.table)
+load("/Volumes/Ranee/SCRNA/GSE138794_scRNA_9.Rdata")
+
+Seurat_Day0=sce.all
+
+Seurat_Day0[["percent.mt"]] <- PercentageFeatureSet(Seurat_Day0, pattern = "^MT-")
+# 这个命令是计算基因含量，这里MT是线粒体的意思
+VlnPlot(Seurat_Day0, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+# 可视化一下
+
+plot1 <- FeatureScatter(Seurat_Day0, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(Seurat_Day0, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+
+
+#过滤具有超过 8000 或少于 200 个独特特征的细胞，过滤>25%的线粒体（线粒体不清楚为何过滤）
+Seurat_Day0_fit <- subset(Seurat_Day0, subset = nFeature_RNA > 200 & nFeature_RNA < 8000 & percent.mt < 20)
+
+Seurat_Day0_fit_norm <- NormalizeData(Seurat_Day0_fit , normalization.method = "LogNormalize", scale.factor = 10000)
+#这些参数都是默认值，可以不写
+
+all.genes <- rownames(Seurat_Day0_fit_norm) #Seurat_Day0_fit_norm这个是上一节的名字，换成自己的项目名即可
+#all.genes1=as.data.frame(all.genes)
+#save(all.genes1,file = "all.genes.Rdata")
+Seurat_Day0_fit_norm<-FindVariableFeatures(Seurat_Day0_fit_norm) #找到所有特征（可不执行）
+#Seurat_Day0_fit_norm_sca<- ScaleData(Seurat_Day0_fit_norm)
+Seurat_Day0_fit_norm_sca<- ScaleData(Seurat_Day0_fit_norm, features = all.genes)
+#这里是对所有基因进行缩放，官方说如果只是为了降维和聚类，那么这里采用默认值（2000）即可
+
+
+#PCA 
+Seurat_Day0_fit_norm_pca <- RunPCA(Seurat_Day0_fit_norm_sca,
+                                   features = VariableFeatures(object = Seurat_Day0_fit_norm_sca))
+#参数默认即可
+
+
+
+#先找到最佳聚类数
+Seurat_Day0_fit_norm_pca1=JackStraw(Seurat_Day0_fit_norm_pca,num.replicate = 100)
+Seurat_Day0_fit_norm_pca1=ScoreJackStraw(Seurat_Day0_fit_norm_pca1,dim=1:20)
+JackStrawPlot(Seurat_Day0_fit_norm_pca1,dims = 1:20)
+
+ElbowPlot(Seurat_Day0_fit_norm_pca1)
+
+##julei
+Seurat_Day0_fit_norm_pca_c <- FindNeighbors(Seurat_Day0_fit_norm_pca, dims = 1:25)
+Seurat_Day0_fit_norm_pca_c <- FindClusters(Seurat_Day0_fit_norm_pca_c, resolution = 0.3)
+# 一般出错的话都是前面PCA和缩放错误
+UMAP <- RunUMAP(Seurat_Day0_fit_norm_pca_c, dims = 1:25)
+DimPlot(UMAP, reduction = "umap",label = T)
+
+#TSNE=RunTSNE(Seurat_Day0_fit_norm_pca_c, dims = 1:25)
+#DimPlot(TSNE, reduction = "tsne")
+
+#save(Seurat_Day0_fit_norm_pca_c,file = "./Seurat_Day0_fit_norm_pca_c.rds")
+#save(Seurat_Day0_fit_norm_pca_c,file = "./Seurat_Day0_fit_norm_pca_c.Rdata")
+
+
