@@ -1,0 +1,58 @@
+online download gse dataset 
+########array
+
+#############################################################################################################################################################################################
+gse <- "GSE102088"
+library(AnnoProbe)
+if(!file.exists(paste0(gse,"_eSet.Rdata"))) {
+  gset <- geoChina(gse)  # 下载表达矩阵和临床数???
+  ids <- idmap(gpl = "GPL17586", type = "soft", mirror = "tercent")
+  save(gset, ids, file = paste0(gse,"_eSet.Rdata"))  # 将下载下来的文件保存为R语言可以处理的格???
+}
+
+# 提取数据集中需要的部分
+load(paste0(gse,"_eSet.Rdata"))
+GEO_file=gset
+# 提取GEO_file中第一个数据，有的数据有两个平台测量的数据，会有[[]]
+exp <- exprs(GEO_file[[1]])  # 提取数据中的样本基因表达矩阵log2 transformed RMA signal intensity
+plate <- fData(GEO_file[[1]])  #提取数据中的平台信息
+clinical <- pData(GEO_file[[1]])  # ???
+
+#######################################txt#########soft#############################################################################################################################################
+
+##local read
+###txt format
+################################################
+#exprSet1 <- read.table("./GSE222515-GPL24000_series_matrix.txt",
+#                      comment.char="!",       #comment.char="!" 鎰忔€濇槸锛佸悗闈㈢殑鍐呭涓嶈璇诲彇
+#                      stringsAsFactors=F,
+#                      header=T)
+#class(exprSet1)
+#rownames(exprSet1) <- exprSet1[,1]  #鎶婄涓€鍒楃殑鍊煎彉涓鸿鍚?
+#exprSet1 <- exprSet1[,-1]  #鎶婄涓€鍒楀幓鎺?
+
+################################################
+#exprSet2 <- read.table("./GSE222515-GPL10558_series_matrix.txt",
+#                     comment.char="!",       #comment.char="!" 鎰忔€濇槸锛佸悗闈㈢殑鍐呭涓嶈璇诲彇
+#                      stringsAsFactors=F,
+#                      header=T)
+#class(exprSet2)
+#rownames(exprSet2) <- exprSet2[,1]  #鎶婄涓€鍒楃殑鍊煎彉涓鸿鍚?
+#exprSet2 <- exprSet2[,-1]  #鎶婄涓€鍒楀幓鎺?
+
+#######
+library(data.table)
+tpm_GSE222515=read.table("E:/GEO5RRdataset/ GSE222515./GSE222515_output_tpm_all_samples.txt/GSE222515_output_tpm_all_samples.txt")
+#A=primary;B=recurrent
+group=colnames(tpm_GSE222515) %>%as.data.frame()
+group$group=rep(c("Primary","recuurent"),40)
+
+#save(tpm_GSE222515,group,file = "DataGSE222515tpm.Rdata")
+
+rm(list = ls())
+
+
+#读入soft,use getgeo
+load("E:/GEO5RRdataset/ GSE222515/DataGSE222515tpm.Rdata")
+GPL16791=getGEO(filename = "./GPL16791_family.soft/GPL16791_family.soft")
+dataGPL1679=GPL16791@dataTable@table
