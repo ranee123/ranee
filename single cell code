@@ -1,0 +1,524 @@
+##单细胞数据记录
+# 单细胞代码收集
+
+下载相关的R包
+
+```
+BiocManager::install("org.Rn.eg.db")
+a
+yes
+.libPaths()
+install.packages("org.Hs.eg.db")
+
+
+library(M3Drop)
+library(M3DExampleData) 
+library(scRNAseq)
+library(SCnorm)
+library(scater)
+library(scran)
+library(SingleR)
+library(Seurat)
+library(monocle)
+library(DESeq2)
+library(DOSE)
+library(pheatmap)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(org.Mm.eg.db)
+library(org.Rn.eg.db)
+
+```
+
+
+
+# 批量读入GEO的单细胞raw data
+
+```
+getwd()
+setwd("E:/GSE139324")
+
+library(devtools)
+library(celltalker)
+suppressMessages({
+  library(Seurat)
+  library(celltalker)
+})
+set.seed(02221989)
+
+data_dir <- "E:/GSE139324/GSE139324/data_matrices"
+```
+
+
+
+##必须这样做，不然直接用Read10X（）读入原始的raw不管压缩还是解压，都行，必须要每个sample变成默认对应的三个文本。
+
+
+
+```
+##改名，分组
+
+fs=list.files('./GSE139324_RAW/','^GSM')
+fs
+library(tidyverse)
+samples=str_split(fs,'_',simplify = T)[,1]
+
+lapply(unique(samples),function(x){
+  y=fs[grepl(x,fs)]
+  folder=paste0("GSE139324_RAW/", str_split(y[1],'_',simplify = T)[,1])
+  dir.create(folder,recursive = T)
+  #为每个样本创建子文件夹
+  file.rename(paste0("GSE139324_RAW/",y[1]),file.path(folder,"barcodes.tsv.gz"))
+  #重命名文件，并移动到相应的子文件夹里
+  file.rename(paste0("GSE139324_RAW/",y[2]),file.path(folder,"features.tsv.gz"))
+  file.rename(paste0("GSE139324_RAW/",y[3]),file.path(folder,"matrix.mtx.gz"))
+})
+
+
+##多样本合并
+
+library(Seurat)
+samples=list.files("GSE139324_RAW/")
+samples
+dir <- file.path('./GSE139324_RAW',samples)
+names(dir) <- samples
+
+#合并方法1  一种是直接全部读入，创建对象；
+counts <- Read10X(data.dir = dir)
+scRNA1 = CreateSeuratObject(counts, min.cells=1)
+dim(scRNA1)   #查看基因数和细胞总数
+table(scRNA1@meta.data$orig.ident)  #查看每个样本的细胞数
+
+#合并方法2 先对每个样本创建对象，再将所有对象合并为最终的对象。
+scRNAlist <- list()
+for(i in 1:length(dir)){
+  print(i)
+  counts <- Read10X(data.dir = dir[i])
+  scRNAlist[[i]] <- CreateSeuratObject(counts, min.cells=1)
+}
+scRNA2 <- merge(scRNAlist[[1]], y=c(scRNAlist[[2]], scRNAlist[[3]], 
+                                    scRNAlist[[4]], scRNAlist[[5]], scRNAlist[[6]], scRNAlist[[7]], 
+                                    scRNAlist[[8]], scRNAlist[[9]], scRNAlist[[10]]))
+
+
+
+
+dim(scRNA2)   #查看基因数和细胞总数
+table(scRNA2@meta.data$orig.ident)  #查看每个样本的细胞数
+
+```
+
+
+
+
+
+# ##T检验代码
+
+```
+
+setwd("C:/Users/Lenovo/Desktop/static_R")
+getwd()
+library(xlsx)
+library(ggplot2)
+library(ggpubr)
+library(graph)
+library(ggprism)
+
+##a is 20220826的第三次cck8，0h的HT22单独和共培没有差别，选择的是相对数
+a=readxl::read_xlsx("C:/Users/Lenovo/Desktop/cck8/0826/20220826_cck8_third.xlsx",sheet = 9)
+str(a)
+
+
+#正态
+by(a$value,a$group,shapiro.test)
+by(a$value,a$group,qqnorm,col=3)
+by(a$value,a$group,qqline,col=3)
+#方差齐性
+library(car)
+library(carData)
+str(a)
+a=as.data.frame(a)
+a$group=as.factor(a$group)
+leveneTest(value~group,data=a,center=mean)
+var.test(a[1:6,2],a[7:12,2])
+##2独立样本的t检验
+t.test(value~group,data=a,var.equal=T)
+
+
+```
+
+
+
+# ##下载GEO数据集
+
+```
+
+getwd()
+rm(list = ls())
+setwd("D:/桌面/GDF15放疗抵抗/IHC_guangdonren")
+library(readxl)
+GBM <- read_excel("GBM.xlsx")
+
+recurrence=GBM[grep("复发",GBM$病理诊断),]#32
+
+
+primary=GBM[grep("原发",GBM$病理诊断),]#32
+
+# "王涛"   "朱鸿正" "刘国兴" "郑文广" "麦小华" "唐雪珍" "甄德福"
+intersect(primary$姓名,recurrence$姓名)
+
+
+pair=GBM[ GBM$姓名 %in% intersect(primary$姓名,recurrence$姓名),]#61
+pair=pair[order(pair$姓名,decreasing = T),]
+
+write.csv(primary,file = "primaryGBM.csv",row.names = T)
+write.csv(pair,file = "配对GBM.csv",row.names = T)
+write.csv(recurrence,file = "recurrencGBM.csv",row.names = T)
+
+
+getwd()
+setwd("D:/桌面/GEO")
+library(GEOquery)
+library(Biobase)
+library(limma)        #主要用这个包分析
+library(plyr)
+library(dplyr)
+
+rm(list = ls())
+#	log2 signal
+m <- getGEO('GSE45404', GSEMatrix=T, destdir=getwd())  #如此获得是Matrix类的表达数据，默认GSEMatrix=TRUE 
+ges1=m[[1]]
+##log2 signal
+assayData <- ges1@assayData
+exp1 <- assayData$exprs %>%as.data.frame()
+boxplot(exp1)###
+dev.off()
+
+##
+phenoData <- ges1@phenoData
+pphenoData <-phenoData@data %>% select("geo_accession"  ,"class:ch1"  )
+
+#probe + gene
+featureData <- ges1@featureData
+fd2=featureData@data %>% select("ID","GENE_SYMBOL")
+probeAno=fd2
+index <-grep("1",unlist(lapply(strsplit(probeAno$GENE_SYMBOL,"///"),length)))
+proAno <- probeAno[index,]
+proAno <- na.omit(proAno)
+
+##probe2symbol
+exp2 <- data.frame(ID =rownames(exp1),exp1)
+eset <- merge(proAno,exp2,by = "ID")
+eset <- eset %>% as.matrix()
+rownames(eset) <- eset[,"GENE_SYMBOL"]
+
+##助limma包的avereps函数去重，并取均值。
+library(limma)
+eset <- eset[,-c(1:2)] 
+eset <- avereps(eset)
+eset <- as.data.frame(eset) %>% data.matrix() %>% as.data.frame()
+
+###
+library(limma)
+library(dplyr)
+
+##group,构建design 样本分组矩阵
+group=pphenoData$`class:ch1`
+design <- model.matrix(~0+group)
+rownames(design) = colnames(exp1)
+colnames(design)=c("Nonresponder","Responder")
+## 拟合模型
+fit <- lmFit(eset,design)
+contrast.matrix=makeContrasts(contrasts = c('Nonresponder-Responder'), levels = design)
+fit2 <- contrasts.fit(fit, contrast.matrix) 
+fit2 <- eBayes(fit2) 
+DiffEG<-topTable(fit2, coef=1, n=Inf) %>% na.omit()
+
+library(dplyr)
+res<-DiffEG
+res$gene=rownames(res)
+str(res)
+res_1<-res %>% dplyr::filter((logFC>100 | logFC < (-100)) & P.Value < 0.001)
+
+
+getwd()
+setwd("D:/桌面/GEO")
+library(GEOquery)
+library(Biobase)
+library(limma)        #主要用这个包分析
+library(plyr)
+library(dplyr)
+
+rm(list = ls())
+#	log2 signal
+m <- getGEO('GSE45404', GSEMatrix=T, destdir=getwd())  #如此获得是Matrix类的表达数据，默认GSEMatrix=TRUE 
+ges2=m[[2]]
+##log2 signal
+assayData <- ges2@assayData
+exp2 <- assayData$exprs %>%as.data.frame()
+#boxplot(exp2)###
+#dev.off()
+
+##
+phenoData <- ges2@phenoData
+pphenoData <-phenoData@data %>% select("geo_accession"  ,"class:ch1"  )
+
+#probe + gene
+featureData <- ges2@featureData
+fd2=featureData@data %>% select("ID","Gene Symbol")
+probeAno=fd2
+index <-grep("1",unlist(lapply(strsplit(probeAno$`Gene Symbol`,"///"),length)))
+proAno <- probeAno[index,]
+proAno <- na.omit(proAno)
+
+##probe2symbol
+exp2 <- data.frame(ID =rownames(exp2),exp2)
+eset <- merge(proAno,exp2,by = "ID")
+eset <- eset %>% as.matrix()
+rownames(eset) <- eset[,"Gene Symbol"]
+
+##助limma包的avereps函数去重，并取均值。
+library(limma)
+eset <- eset[,-c(1:2)] 
+eset <- avereps(eset)
+eset <- as.data.frame(eset) %>% data.matrix() %>% as.data.frame()
+
+###
+library(limma)
+library(dplyr)
+
+##group,构建design 样本分组矩阵
+group=pphenoData$`class:ch1`
+design <- model.matrix(~0+group)
+rownames(design) = colnames(eset)
+colnames(design)=c("Nonresponder","Responder")
+## 拟合模型
+fit <- lmFit(eset,design)
+contrast.matrix=makeContrasts(contrasts = c('Nonresponder-Responder'), levels = design)
+fit2 <- contrasts.fit(fit, contrast.matrix) 
+fit2 <- eBayes(fit2) 
+DiffEG<-topTable(fit2, coef=1, n=Inf) %>% na.omit()
+
+library(dplyr)
+res<-DiffEG
+res$gene=rownames(res)
+str(res)
+res_1<-res %>% dplyr::filter((logFC>100 | logFC < (-100)) & P.Value < 0.001)
+
+```
+
+
+
+# 小鼠生存R作图
+
+```
+
+getwd()
+rm(list = ls())
+setwd("D:/桌面/BEV预实验5")
+library(readxl)
+a=read_excel("OS.xlsx")
+#b=a[,c(1,2,5,6)]
+#str(b)"
+colnames(a)=c( "NO","group" , "os","event")
+table(a$group)
+
+str(a)
+
+a=a[order(a$group,decreasing = T),]
+b=a
+table(b$group)
+
+b1=b
+
+library(ggplot2)
+library(survminer)
+library(survival)
+fit<-survfit(Surv(os,event)~group,data=b1)
+p1<-ggsurvplot(fit,data = b1,
+               palette = 'lancet', #你可以试着用jcp
+               linetype = 1, #曲线类型，默认为1即可
+              # conf.int = T,conf.int.style='step', #置信区间，按虚线分布
+               pval = T,pval.method = T,#显示P值和方法
+             #  surv.median.line = 'hv',#显示中位生存时间
+           #   risk.table = T,risk.table.pos='in',#显示危险表，并置入图内
+               legend=c(0.2,0.5),#标签位置
+               legend.title="group",#更改分组名
+             #  legend.labs=c("Female","Male"),#更改组内数据名，记得不要搞错，最好先看一下
+               title="Survival curve", #以前是main=，现在改成了title=
+               ggtheme = theme_bw(base_size = 9) #改一下主题，改一下字体大小
+) 
+p1
+
+dev.off()
+
+
+
+
+b2=b[b$group=="RT"|b$group=="RT+M"|b$group=="RT+L"|b$group=="RT+H",]
+###1
+#library(survival)
+#fit<-survfit(Surv(os,event)~group,data=b2)
+#plot(fit)
+#ggsurvplot(fit,pval = T)
+
+###2
+library(ggplot2)
+library(survminer)
+library(survival)
+fit<-survfit(Surv(os,event)~group,data=b2)
+p2<-ggsurvplot(fit,data = b2,
+               palette = 'lancet', #你可以试着用jcp
+               linetype = 1, #曲线类型，默认为1即可
+              # conf.int = T,conf.int.style='step', #置信区间，按虚线分布
+               pval = T,pval.method = T,#显示P值和方法
+               surv.median.line = 'hv',#显示中位生存时间
+               #    risk.table = T,risk.table.pos='in',#显示危险表，并置入图内
+               legend=c(0.2,0.5),#标签位置
+               legend.title="group",#更改分组名
+               #  legend.labs=c("Female","Male"),#更改组内数据名，记得不要搞错，最好先看一下
+               title="Survival curve", #以前是main=，现在改成了title=
+               ggtheme = theme_bw(base_size = 9) #改一下主题，改一下字体大小
+)
+p2
+
+dev.off()
+
+
+b3=b[b$group=="NC"|b$group=="RT"|b$group=="L+RT"|b$group=="H+RT",]
+
+###2
+library(ggplot2)
+library(survminer)
+library(survival)
+fit<-survfit(Surv(os,event)~group,data=b3)
+p3<-ggsurvplot(fit,data = b3,
+               palette = 'lancet', #你可以试着用jcp
+               linetype = 1, #曲线类型，默认为1即可
+               # conf.int = T,conf.int.style='step', #置信区间，按虚线分布
+               pval = T,pval.method = T,#显示P值和方法
+               surv.median.line = 'hv',#显示中位生存时间
+               #    risk.table = T,risk.table.pos='in',#显示危险表，并置入图内
+               legend=c(0.2,0.5),#标签位置
+               legend.title="group",#更改分组名
+               #  legend.labs=c("Female","Male"),#更改组内数据名，记得不要搞错，最好先看一下
+               title="Survival curve", #以前是main=，现在改成了title=
+               ggtheme = theme_bw(base_size = 9) #改一下主题，改一下字体大小
+)
+p3
+
+dev.off()
+
+
+b4=b[b$group=="NC"|b$group=="PD-1"|b$group=="L+P"|b$group=="H+P",]
+library(ggplot2)
+library(survminer)
+library(survival)
+fit<-survfit(Surv(os,event)~group,data=b4)
+p4<-ggsurvplot(fit,data = b1,
+               palette = 'lancet', #你可以试着用jcp
+               linetype = 1, #曲线类型，默认为1即可
+               # conf.int = T,conf.int.style='step', #置信区间，按虚线分布
+               pval = T,pval.method = T,#显示P值和方法
+               #  surv.median.line = 'hv',#显示中位生存时间
+               #   risk.table = T,risk.table.pos='in',#显示危险表，并置入图内
+               legend=c(0.2,0.5),#标签位置
+               legend.title="group",#更改分组名
+               #  legend.labs=c("Female","Male"),#更改组内数据名，记得不要搞错，最好先看一下
+               title="Survival curve", #以前是main=，现在改成了title=
+               ggtheme = theme_bw(base_size = 9) #改一下主题，改一下字体大小
+) 
+p4
+
+dev.off()
+
+b5=b[b$group=="NC"|b$group=="PD-1"|b$group=="RT"|b$group=="H"|b$group=="L",]
+library(ggplot2)
+library(survminer)
+library(survival)
+fit<-survfit(Surv(os,event)~group,data=b5)
+p5<-ggsurvplot(fit,data = b5,
+               palette = 'lancet', #你可以试着用jcp
+               linetype = 1, #曲线类型，默认为1即可
+               # conf.int = T,conf.int.style='step', #置信区间，按虚线分布
+               pval = T,pval.method = T,#显示P值和方法
+               #  surv.median.line = 'hv',#显示中位生存时间
+               #   risk.table = T,risk.table.pos='in',#显示危险表，并置入图内
+               legend=c(0.2,0.5),#标签位置
+               legend.title="group",#更改分组名
+               #  legend.labs=c("Female","Male"),#更改组内数据名，记得不要搞错，最好先看一下
+               title="Survival curve", #以前是main=，现在改成了title=
+               ggtheme = theme_bw(base_size = 9) #改一下主题，改一下字体大小
+) 
+p5
+
+dev.off()
+
+```
+
+
+
+# 柱形图
+
+```
+getwd()
+setwd("C:/Users/Lenovo/Desktop")
+dir.create("ggplot")
+setwd("C:/Users/Lenovo/Desktop/ggplot")
+
+
+##data structure
+str(airquality)
+
+datax <- as.matrix(na.omit(airquality))
+str(datax)
+sel <- sample(1:nrow(datax), 5)
+y1 <- datax[sel, 1]
+y2 <- datax[sel, 2]
+y3 <- datax[sel, 3]
+labels <- paste("S", 1:length(y1), sep = "")
+legs <- c("Ozone", "Solar.R", "Wind")
+
+
+##
+plot(y1, type = "h", lwd = 15, lend = 2)
+##
+barplot(y1)
+##
+barplot(y1, ylim = c(0, max(y1) * 1.1), offset = 0, axis.lty = 1, names.arg = labels)
+box()
+##
+dataxx <- rbind(y1, y2, y3)
+ylim <- c(0, max(y1 + y2 + y3) * 1.1)
+cols <- terrain.colors(3)
+barplot(dataxx, ylim = ylim, offset = 0, axis.lty = 1, names.arg = labels, col = cols)
+box()
+##wrong 
+barplot(as.data.frame(dataxx), ylim = ylim, offset = 0, axis.lty = 1, names.arg = labels,
+        col = cols)
+
+##不同数据系列在柱形图上放置的默认方式是堆叠。如果要并排方式就设置beside参数为TRUE。
+ylim <- c(0, max(dataxx) * 1.15)
+barplot(dataxx, ylim = ylim, offset = 0, axis.lty = 1, names.arg = labels, col = cols,
+        beside = TRUE)
+box()
+
+##
+barplot(t(dataxx), ylim = ylim, offset = 0, axis.lty = 1, names.arg = legs, 
+        beside = TRUE, col = terrain.colors(length(labels)))
+box()
+
+##add inform
+x <- barplot(dataxx, ylim = ylim, offset = 0, axis.lty = 1, names.arg = labels,
+             col = cols, beside = TRUE)
+box()
+legend("topleft",adj = c(0, 0.5),
+       legend = legs, fill = cols, box.col = "transparent")
+
+legend("topleft", inset=.05, title="Type",  legend = legs,
+        col=cols)
+title(main = "An example of barplot", xlab = "Sample", ylab = "Value")
+dev.off()
+
+```
+
