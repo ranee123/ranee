@@ -1,0 +1,71 @@
+# 读入GEO的附件里面的RAW.TAR
+
+
+
+######################举例GSE100925数据集
+options(stringsAsFactors = F)
+library(GEOquery)
+library(limma)
+library(tidyverse)
+
+###https://www.cnblogs.com/Ixiaozhu/p/16670607.htmls
+##
+#setwd("/Volumes/冯文清19868289/TBC_GSE103746/GSE100925")
+setwd("F:/TNBC/GSE100925")
+rm(list = ls())
+
+#######
+gse <- "GSE100925"
+if(!file.exists(paste0(gse,"_eSet.Rdata"))) {
+  GEO_file <- getGEO(gse,  # 需要下载的series
+                     destdir = ".",  # 文件下载位置，"."表示当前目录
+                     getGPL = T)  # 是否下载GPL注释文件
+  save(GEO_file, file = paste0(gse,"_eSet.Rdata"))  # 将下载下来的文件保存为R语言可以处理的格式
+}
+
+load(paste0(gse,"_eSet.Rdata"))
+GEO_file[[1]]  # 提取GEO_file中第一个数据，有的数据有两个平台测量的数据，会有[[]]
+exp <- exprs(GEO_file[[1]])  # 提取数据中的样本基因表达矩阵
+plate <- fData(GEO_file[[1]])  #提取数据中的平台信息
+clinical <- pData(GEO_file[[1]])  # 提
+
+##HST and TBNC and RT和chemothearapy
+##103 sampele but 63 unique patie
+table(clinical$`tissue:ch1`)#
+
+###read FPKM data of 50 sample
+
+library(affyPLM)
+library(GEOquery)
+
+getwd()######
+setwd("F:/TNBC/GSE100925/GSE100925_RAW")
+library(stringi)
+library(tidyverse)
+library(data.table)
+# 解压缩文件
+tar_file <- "GSE100925_RAW.tar"
+untar(tar_file)
+#利获取解压缩后的txt.gz文件列表
+txtgz.files <- list.files(pattern = ".+\\.txt.gz$", ignore.case = TRUE,full.names = TRUE, recursive = TRUE)
+# 遍历每个txt.gz文件，将数据读取到数据框中
+for (i in 1:length(txtgz.files)){
+  if(i<2){
+    pbmc<-fread(file=txtgz.files[i],header=T)
+    pbmc=as.data.frame(pbmc)
+    pbmc1=data.frame(pbmc[,2])
+    rownames(pbmc1)=pbmc[,1]}
+  if(i>1){
+    pbmc2<-fread(file=txtgz.files[i],header=T)
+    pbmc2=as.data.frame(pbmc2)
+    pbmc3=data.frame(pbmc2[,2])
+    rownames(pbmc3)=pbmc2[,1]
+    pbmc1=data.frame(pbmc1,pbmc3)
+  }
+}
+datanames<-stri_sub(txtgz.files,3,12)
+colnames(pbmc1)=datanames
+
+setwd("F:/TNBC/GSE100925")
+FPKM50=pbmc1
+#save(FPKM50,clinical,file = "GSE100925_FPKM50_clinical.Rdata")
