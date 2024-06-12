@@ -1,0 +1,16 @@
+#GPL6244 read in
+gp6244  <- getGEO("GPL6244", destdir=".") #根据GPL号下载的是芯片设计的信息
+table=colnames(gp6244@dataTable@table)
+ids=gp6244@dataTable@table[,c("ID","gene_assignment")]
+ids[1:3,1:2]
+library(stringr)
+library(dplyr)
+str_split("// 19p13.3 // 81099 /// BC136867 // OR4F17 // olfact",pattern = " // ")[[1]][2]
+
+#自建函数
+get_no.2<-function(x){
+  str_split(x,pattern = " // ")[[1]][2]
+}
+unlist(lapply(ids$gene_assignment[1:4],get_no.2))
+ids6244=ids %>% mutate(gene_assignment=unlist(lapply(ids$gene_assignment,get_no.2))) %>%na.omit()
+head(ids6244)
